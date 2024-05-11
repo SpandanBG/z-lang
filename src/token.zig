@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const memEq = std.mem.eql;
 const Allocator = std.mem.Allocator;
 const SHMap = std.StringHashMap;
 
@@ -60,15 +61,21 @@ pub fn debug_str(t_type: TokenType) [:0]const u8 {
 
 pub const Tokenizer = struct {
     tm: SHMap(*Token), // token memo
+    km: SHMap(TokenType), // keyword memo
     a: Allocator,
 
     const Self = @This();
 
     pub const Error = Allocator.Error || error{};
 
-    pub fn init(a: Allocator) Self {
+    pub fn init(a: Allocator) Error!Self {
         const tm = SHMap(*Token).init(a);
-        return .{ .tm = tm, .a = a };
+
+        var km = SHMap(TokenType).init(a);
+        try km.put("let", TokenType.LET);
+        try km.put("fn", TokenType.FUNCTION);
+
+        return .{ .tm = tm, .km = km, .a = a };
     }
 
     pub fn get(self: *Self, t_type: TokenType, literal: []const u8) Error!*Token {
@@ -76,6 +83,10 @@ pub const Tokenizer = struct {
         const t = try self.new_token(t_type, literal);
         try self.tm.put(literal, t);
         return t;
+    }
+
+    pub fn get_type(self: *Self, literal: []const u8) TokenType {
+        return self.km.get(literal) orelse TokenType.IDENT;
     }
 
     pub fn deinit(self: *Self) void {
@@ -86,6 +97,7 @@ pub const Tokenizer = struct {
             self.a.destroy(v.*);
         }
         self.tm.deinit();
+        self.km.deinit();
     }
 
     fn new_token(self: Self, t_type: TokenType, literal: []const u8) Error!*Token {
@@ -101,23 +113,22 @@ pub const Tokenizer = struct {
 
 const isEq = std.testing.expectEqual;
 const isTrue = std.testing.expect;
-const memEq = std.mem.eql;
 
 test "debug str" {
     try std.testing.expect(std.mem.eql(u8, "EOF", debug_str(TokenType.EOF)));
 }
 
 test "tokenizer" {
-    var tknz = Tokenizer.init(std.testing.allocator);
+    var tknz = try Tokenizer.init(std.testing.allocator);
     defer tknz.deinit();
 
     const t = try tknz.get(TokenType.LET, "let");
     const t2 = try tknz.get(TokenType.LET, "let");
 
-    isEq(@intFromEnum(TokenType.LET), @intFromEnum(t.t_type)) catch |err| {
+    isEq(@intFromEnum(tknz.get_type("let")), @intFromEnum(t.t_type)) catch |err| {
         std.log.err(
             "\nexpected t_type = {s}\nfound t_type = {s}\n",
-            .{ debug_str(TokenType.LET), debug_str(t.t_type) },
+            .{ debug_str(tknz.get_type("let")), debug_str(t.t_type) },
         );
         return err;
     };

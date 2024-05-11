@@ -2,22 +2,36 @@ const std = @import("std");
 const token = @import("token.zig");
 const cstring = @cImport(@cInclude("ctype.h"));
 
+const Allocator = std.mem.Allocator;
 const File = std.fs.File;
+const AList = std.ArrayList;
+
 const TokenType = token.TokenType;
 const Token = token.Token;
 const Tokenizer = token.Tokenizer;
-
-const LexerError = Tokenizer.Error || File.ReadError || error{FILE_EOF};
 
 pub const Lexer = struct {
     in: File, // program file
     ri: u1 = 0, // current read index
     rb: [3:0]u8 = undefined, // read buffer
+    a: Allocator,
+    flex_buf: AList(u8),
     tknzr: *Tokenizer,
+
+    pub const Error = Tokenizer.Error || Allocator.Error || File.ReadError || error{FILE_EOF};
 
     const Self = @This();
 
-    pub fn next_token(self: *Self) LexerError!*Token {
+    fn init(in: File, tknzr: *Tokenizer, a: Allocator) Error!Self {
+        const fb = AList(u8).init(a);
+        var lxr = Lexer{ .in = in, .flex_buf = fb, .tknzr = tknzr, .a = a };
+        _ = try in.read(&lxr.rb);
+        return lxr;
+    }
+
+    pub fn next_token(self: *Self) Error!*Token {
+        try self.skip_whitespace();
+
         const c = self.rb[self.ri];
 
         const tok = switch (c) {
@@ -31,6 +45,18 @@ pub const Lexer = struct {
             '}' => try self.tknzr.get(TokenType.RBRACE, "}"),
             '\x00' => try self.tknzr.get(TokenType.EOF, "\x00"),
             else => {
+                if (is_letter(c)) {
+                    self.flex_buf.clearRetainingCapacity();
+
+                    while (is_letter(self.rb[self.ri])) : (_ = try self.read_char()) {
+                        try self.flex_buf.append(self.rb[self.ri]);
+                    }
+                    const l = self.flex_buf.items[0..self.flex_buf.items.len];
+                    const t = self.tknzr.get_type(l);
+
+                    return try self.tknzr.get(t, l);
+                }
+
                 return try self.tknzr.get(TokenType.ILLEGAL, &([1]u8{c}));
             },
         };
@@ -39,7 +65,11 @@ pub const Lexer = struct {
         return tok;
     }
 
-    fn read_char(self: *Self) LexerError!void {
+    pub fn deinit(self: *Self) void {
+        self.flex_buf.deinit();
+    }
+
+    fn read_char(self: *Self) Error!void {
         if (self.ri == 0) {
             self.ri += 1;
             return;
@@ -48,18 +78,20 @@ pub const Lexer = struct {
         self.ri = 0;
         self.rb[0] = self.rb[2];
         const r_size = try self.in.read(self.rb[1..]);
-        if (r_size == 0) return LexerError.FILE_EOF;
+        if (r_size == 0) return Error.FILE_EOF;
+    }
+
+    fn skip_whitespace(self: *Self) Error!void {
+        while (is_space(self.rb[self.ri])) : (_ = try self.read_char()) {}
     }
 };
 
-pub fn lexer(in: File, tknzr: *Tokenizer) LexerError!Lexer {
-    var lxr = Lexer{ .in = in, .tknzr = tknzr };
-    _ = try in.read(&lxr.rb);
-    return lxr;
+fn is_letter(c: u8) bool {
+    return cstring.isalpha(c) != 0;
 }
 
-fn is_letter(c: u8) bool {
-    return cstring.isalnum(c) == 1;
+fn is_space(c: u8) bool {
+    return cstring.isspace(c) != 0;
 }
 
 // --------------------------------- TEST
@@ -84,11 +116,17 @@ test "next token" {
         .{ .e_ttype = TokenType.RBRACE, .e_literal = "}" },
         .{ .e_ttype = TokenType.COMMA, .e_literal = "," },
         .{ .e_ttype = TokenType.SEMICOLON, .e_literal = ";" },
+        .{ .e_ttype = TokenType.LET, .e_literal = "let" },
+        .{ .e_ttype = TokenType.IDENT, .e_literal = "five" },
+        .{ .e_ttype = TokenType.ASSIGN, .e_literal = "=" },
+        // .{ .e_ttype = TokenType.INT, .e_literal = "5" },
     };
 
-    var tknzr = Tokenizer.init(std.testing.allocator);
+    var tknzr = try Tokenizer.init(std.testing.allocator);
     defer tknzr.deinit();
-    var lxr = try lexer(input_f, &tknzr);
+
+    var lxr = try Lexer.init(input_f, &tknzr, std.testing.allocator);
+    defer lxr.deinit();
 
     for (tests) |t| {
         const tok = try lxr.next_token();
