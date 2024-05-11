@@ -39,6 +39,11 @@ pub const TokenType = enum(u8) {
     // Keywords
     FUNCTION,
     LET,
+    RETURN,
+    IF,
+    ELSE,
+    TRUE,
+    FALSE,
 };
 
 pub const Token = struct {
@@ -78,6 +83,11 @@ pub fn debug_str(t_type: TokenType) [:0]const u8 {
 
         .FUNCTION => "FUNCTION",
         .LET => "LET",
+        .RETURN => "RETURN",
+        .IF => "IF",
+        .ELSE => "ELSE",
+        .TRUE => "TRUE",
+        .FALSE => "FALSE",
     };
 }
 
@@ -96,6 +106,11 @@ pub const Tokenizer = struct {
         var km = SHMap(TokenType).init(a);
         try km.put("let", TokenType.LET);
         try km.put("fn", TokenType.FUNCTION);
+        try km.put("return", TokenType.RETURN);
+        try km.put("if", TokenType.IF);
+        try km.put("else", TokenType.ELSE);
+        try km.put("true", TokenType.TRUE);
+        try km.put("false", TokenType.FALSE);
 
         return .{ .tm = tm, .km = km, .a = a };
     }

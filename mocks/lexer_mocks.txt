@@ -14,3 +14,9 @@ let result = add(five, ten);
 5 <= 10 >= 5;
 5 != 5;
 10 == 10;
+
+if (5 < 10) {
+  return true;
+} else {
+  return false;
+}
