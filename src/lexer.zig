@@ -47,7 +47,6 @@ pub const Lexer = struct {
             else => {
                 if (is_letter(c)) {
                     self.flex_buf.clearRetainingCapacity();
-
                     while (is_letter(self.rb[self.ri])) : (_ = try self.read_char()) {
                         try self.flex_buf.append(self.rb[self.ri]);
                     }
@@ -55,6 +54,16 @@ pub const Lexer = struct {
                     const t = self.tknzr.get_type(l);
 
                     return try self.tknzr.get(t, l);
+                }
+
+                if (is_number(c)) {
+                    self.flex_buf.clearRetainingCapacity();
+                    while (is_number(self.rb[self.ri])) : (_ = try self.read_char()) {
+                        try self.flex_buf.append(self.rb[self.ri]);
+                    }
+                    const l = self.flex_buf.items[0..self.flex_buf.items.len];
+
+                    return try self.tknzr.get(TokenType.INT, l);
                 }
 
                 return try self.tknzr.get(TokenType.ILLEGAL, &([1]u8{c}));
@@ -77,8 +86,9 @@ pub const Lexer = struct {
 
         self.ri = 0;
         self.rb[0] = self.rb[2];
-        const r_size = try self.in.read(self.rb[1..]);
-        if (r_size == 0) return Error.FILE_EOF;
+        const r_size = try self.in.read(self.rb[1..3]);
+        if (r_size <= 1) self.rb[2] = '\x00';
+        if (r_size == 0) self.rb[1] = '\x00';
     }
 
     fn skip_whitespace(self: *Self) Error!void {
@@ -88,6 +98,10 @@ pub const Lexer = struct {
 
 fn is_letter(c: u8) bool {
     return cstring.isalpha(c) != 0;
+}
+
+fn is_number(c: u8) bool {
+    return cstring.isdigit(c) != 0;
 }
 
 fn is_space(c: u8) bool {
@@ -119,7 +133,40 @@ test "next token" {
         .{ .e_ttype = TokenType.LET, .e_literal = "let" },
         .{ .e_ttype = TokenType.IDENT, .e_literal = "five" },
         .{ .e_ttype = TokenType.ASSIGN, .e_literal = "=" },
-        // .{ .e_ttype = TokenType.INT, .e_literal = "5" },
+        .{ .e_ttype = TokenType.INT, .e_literal = "5" },
+        .{ .e_ttype = TokenType.SEMICOLON, .e_literal = ";" },
+        .{ .e_ttype = TokenType.LET, .e_literal = "let" },
+        .{ .e_ttype = TokenType.IDENT, .e_literal = "ten" },
+        .{ .e_ttype = TokenType.ASSIGN, .e_literal = "=" },
+        .{ .e_ttype = TokenType.INT, .e_literal = "10" },
+        .{ .e_ttype = TokenType.SEMICOLON, .e_literal = ";" },
+        .{ .e_ttype = TokenType.LET, .e_literal = "let" },
+        .{ .e_ttype = TokenType.IDENT, .e_literal = "add" },
+        .{ .e_ttype = TokenType.ASSIGN, .e_literal = "=" },
+        .{ .e_ttype = TokenType.FUNCTION, .e_literal = "fn" },
+        .{ .e_ttype = TokenType.LPAREN, .e_literal = "(" },
+        .{ .e_ttype = TokenType.IDENT, .e_literal = "x" },
+        .{ .e_ttype = TokenType.COMMA, .e_literal = "," },
+        .{ .e_ttype = TokenType.IDENT, .e_literal = "y" },
+        .{ .e_ttype = TokenType.RPAREN, .e_literal = ")" },
+        .{ .e_ttype = TokenType.LBRACE, .e_literal = "{" },
+        .{ .e_ttype = TokenType.IDENT, .e_literal = "x" },
+        .{ .e_ttype = TokenType.PLUS, .e_literal = "+" },
+        .{ .e_ttype = TokenType.IDENT, .e_literal = "y" },
+        .{ .e_ttype = TokenType.SEMICOLON, .e_literal = ";" },
+        .{ .e_ttype = TokenType.RBRACE, .e_literal = "}" },
+        .{ .e_ttype = TokenType.SEMICOLON, .e_literal = ";" },
+        .{ .e_ttype = TokenType.LET, .e_literal = "let" },
+        .{ .e_ttype = TokenType.IDENT, .e_literal = "result" },
+        .{ .e_ttype = TokenType.ASSIGN, .e_literal = "=" },
+        .{ .e_ttype = TokenType.IDENT, .e_literal = "add" },
+        .{ .e_ttype = TokenType.LPAREN, .e_literal = "(" },
+        .{ .e_ttype = TokenType.IDENT, .e_literal = "five" },
+        .{ .e_ttype = TokenType.COMMA, .e_literal = "," },
+        .{ .e_ttype = TokenType.IDENT, .e_literal = "ten" },
+        .{ .e_ttype = TokenType.RPAREN, .e_literal = ")" },
+        .{ .e_ttype = TokenType.SEMICOLON, .e_literal = ";" },
+        .{ .e_ttype = TokenType.EOF, .e_literal = "\x00" },
     };
 
     var tknzr = try Tokenizer.init(std.testing.allocator);

@@ -81,7 +81,7 @@ pub const Tokenizer = struct {
     pub fn get(self: *Self, t_type: TokenType, literal: []const u8) Error!*Token {
         if (self.tm.get(literal)) |t| return t;
         const t = try self.new_token(t_type, literal);
-        try self.tm.put(literal, t);
+        try self.tm.put(t.literal, t);
         return t;
     }
 
