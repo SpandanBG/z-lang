@@ -58,13 +58,13 @@ pub fn debug_str(t_type: TokenType) [:0]const u8 {
     };
 }
 
-const Tokenizer = struct {
+pub const Tokenizer = struct {
     tm: SHMap(*Token), // token memo
     a: Allocator,
 
     const Self = @This();
 
-    const Error = Allocator.Error || error{};
+    pub const Error = Allocator.Error || error{};
 
     pub fn init(a: Allocator) Self {
         const tm = SHMap(*Token).init(a);

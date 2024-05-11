@@ -1,31 +1,38 @@
 const std = @import("std");
 const token = @import("token.zig");
+const cstring = @cImport(@cInclude("ctype.h"));
 
 const File = std.fs.File;
 const TokenType = token.TokenType;
 const Token = token.Token;
+const Tokenizer = token.Tokenizer;
 
-const LexerError = File.ReadError || error{FILE_EOF};
+const LexerError = Tokenizer.Error || File.ReadError || error{FILE_EOF};
 
 pub const Lexer = struct {
     in: File, // program file
-    ri: u1 = 1, // current read index
-    rb: [2:0]u8 = .{ '\x00', '\x00' }, // read buffer
+    ri: u1 = 0, // current read index
+    rb: [3:0]u8 = undefined, // read buffer
+    tknzr: *Tokenizer,
 
     const Self = @This();
 
-    pub fn next_token(self: *Self) LexerError!Token {
-        const tok = switch (self.rb[self.ri]) {
-            '=' => new_token(TokenType.ASSIGN, "="),
-            ';' => new_token(TokenType.SEMICOLON, ";"),
-            '(' => new_token(TokenType.LPAREN, "("),
-            ')' => new_token(TokenType.RPAREN, ")"),
-            ',' => new_token(TokenType.COMMA, ","),
-            '+' => new_token(TokenType.PLUS, "+"),
-            '{' => new_token(TokenType.LBRACE, "{"),
-            '}' => new_token(TokenType.RBRACE, "}"),
-            '\x00' => new_token(TokenType.EOF, "\x00"),
-            else => new_token(TokenType.ILLEGAL, ""),
+    pub fn next_token(self: *Self) LexerError!*Token {
+        const c = self.rb[self.ri];
+
+        const tok = switch (c) {
+            '=' => try self.tknzr.get(TokenType.ASSIGN, "="),
+            ';' => try self.tknzr.get(TokenType.SEMICOLON, ";"),
+            '(' => try self.tknzr.get(TokenType.LPAREN, "("),
+            ')' => try self.tknzr.get(TokenType.RPAREN, ")"),
+            ',' => try self.tknzr.get(TokenType.COMMA, ","),
+            '+' => try self.tknzr.get(TokenType.PLUS, "+"),
+            '{' => try self.tknzr.get(TokenType.LBRACE, "{"),
+            '}' => try self.tknzr.get(TokenType.RBRACE, "}"),
+            '\x00' => try self.tknzr.get(TokenType.EOF, "\x00"),
+            else => {
+                return try self.tknzr.get(TokenType.ILLEGAL, &([1]u8{c}));
+            },
         };
 
         try self.read_char();
@@ -39,19 +46,20 @@ pub const Lexer = struct {
         }
 
         self.ri = 0;
-        const r_size = try self.in.read(&self.rb);
+        self.rb[0] = self.rb[2];
+        const r_size = try self.in.read(self.rb[1..]);
         if (r_size == 0) return LexerError.FILE_EOF;
     }
 };
 
-pub fn lexer(in: File) LexerError!Lexer {
-    var lxr = Lexer{ .in = in };
-    try lxr.read_char();
+pub fn lexer(in: File, tknzr: *Tokenizer) LexerError!Lexer {
+    var lxr = Lexer{ .in = in, .tknzr = tknzr };
+    _ = try in.read(&lxr.rb);
     return lxr;
 }
 
-fn new_token(t_type: TokenType, literal: [:0]const u8) Token {
-    return Token{ .t_type = t_type, .literal = literal };
+fn is_letter(c: u8) bool {
+    return cstring.isalnum(c) == 1;
 }
 
 // --------------------------------- TEST
@@ -78,7 +86,9 @@ test "next token" {
         .{ .e_ttype = TokenType.SEMICOLON, .e_literal = ";" },
     };
 
-    var lxr = try lexer(input_f);
+    var tknzr = Tokenizer.init(std.testing.allocator);
+    defer tknzr.deinit();
+    var lxr = try lexer(input_f, &tknzr);
 
     for (tests) |t| {
         const tok = try lxr.next_token();
