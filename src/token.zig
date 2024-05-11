@@ -15,6 +15,17 @@ pub const TokenType = enum(u8) {
     // Operators
     ASSIGN,
     PLUS,
+    MINUS,
+    BANG,
+    ASTERISK,
+    SLASH,
+
+    EQ,
+    NEQ,
+    LT,
+    LTE,
+    GT,
+    GTE,
 
     // Delimiters
     COMMA,
@@ -45,6 +56,17 @@ pub fn debug_str(t_type: TokenType) [:0]const u8 {
 
         .ASSIGN => "ASSIGN",
         .PLUS => "PLUS",
+        .MINUS => "MINUS",
+        .BANG => "BANG",
+        .ASTERISK => "ASTERISK",
+        .SLASH => "SLASH",
+
+        .EQ => "EQ",
+        .NEQ => "NEQ",
+        .LT => "LT",
+        .LTE => "LTE",
+        .GT => "GT",
+        .GTE => "GTE",
 
         .COMMA => "COMMA",
         .SEMICOLON => "SEMICOLON",

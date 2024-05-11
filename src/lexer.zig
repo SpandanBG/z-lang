@@ -12,7 +12,7 @@ const Tokenizer = token.Tokenizer;
 
 pub const Lexer = struct {
     in: File, // program file
-    ri: u1 = 0, // current read index
+    ri: u2 = 0, // current read index
     rb: [3:0]u8 = undefined, // read buffer
     a: Allocator,
     flex_buf: AList(u8),
@@ -35,8 +35,38 @@ pub const Lexer = struct {
         const c = self.rb[self.ri];
 
         const tok = switch (c) {
-            '=' => try self.tknzr.get(TokenType.ASSIGN, "="),
+            '=' => eq_blk: {
+                if (self.peek_char() == '=') {
+                    try self.read_char();
+                    break :eq_blk try self.tknzr.get(TokenType.EQ, "==");
+                }
+                break :eq_blk try self.tknzr.get(TokenType.ASSIGN, "=");
+            },
+            '>' => gt_blk: {
+                if (self.peek_char() == '=') {
+                    try self.read_char();
+                    break :gt_blk try self.tknzr.get(TokenType.GTE, ">=");
+                }
+                break :gt_blk try self.tknzr.get(TokenType.GT, ">");
+            },
+            '<' => lt_blk: {
+                if (self.peek_char() == '=') {
+                    try self.read_char();
+                    break :lt_blk try self.tknzr.get(TokenType.LTE, "<=");
+                }
+                break :lt_blk try self.tknzr.get(TokenType.LT, "<");
+            },
+            '!' => bang_vlk: {
+                if (self.peek_char() == '=') {
+                    try self.read_char();
+                    break :bang_vlk try self.tknzr.get(TokenType.NEQ, "!=");
+                }
+                break :bang_vlk try self.tknzr.get(TokenType.BANG, "!");
+            },
             ';' => try self.tknzr.get(TokenType.SEMICOLON, ";"),
+            '-' => try self.tknzr.get(TokenType.MINUS, "-"),
+            '/' => try self.tknzr.get(TokenType.SLASH, "/"),
+            '*' => try self.tknzr.get(TokenType.ASTERISK, "*"),
             '(' => try self.tknzr.get(TokenType.LPAREN, "("),
             ')' => try self.tknzr.get(TokenType.RPAREN, ")"),
             ',' => try self.tknzr.get(TokenType.COMMA, ","),
@@ -89,6 +119,10 @@ pub const Lexer = struct {
         const r_size = try self.in.read(self.rb[1..3]);
         if (r_size <= 1) self.rb[2] = '\x00';
         if (r_size == 0) self.rb[1] = '\x00';
+    }
+
+    fn peek_char(self: Self) u8 {
+        return self.rb[self.ri + 1];
     }
 
     fn skip_whitespace(self: *Self) Error!void {
@@ -165,6 +199,32 @@ test "next token" {
         .{ .e_ttype = TokenType.COMMA, .e_literal = "," },
         .{ .e_ttype = TokenType.IDENT, .e_literal = "ten" },
         .{ .e_ttype = TokenType.RPAREN, .e_literal = ")" },
+        .{ .e_ttype = TokenType.SEMICOLON, .e_literal = ";" },
+        .{ .e_ttype = TokenType.BANG, .e_literal = "!" },
+        .{ .e_ttype = TokenType.MINUS, .e_literal = "-" },
+        .{ .e_ttype = TokenType.SLASH, .e_literal = "/" },
+        .{ .e_ttype = TokenType.ASTERISK, .e_literal = "*" },
+        .{ .e_ttype = TokenType.INT, .e_literal = "5" },
+        .{ .e_ttype = TokenType.SEMICOLON, .e_literal = ";" },
+        .{ .e_ttype = TokenType.INT, .e_literal = "5" },
+        .{ .e_ttype = TokenType.LT, .e_literal = "<" },
+        .{ .e_ttype = TokenType.INT, .e_literal = "10" },
+        .{ .e_ttype = TokenType.GT, .e_literal = ">" },
+        .{ .e_ttype = TokenType.INT, .e_literal = "5" },
+        .{ .e_ttype = TokenType.SEMICOLON, .e_literal = ";" },
+        .{ .e_ttype = TokenType.INT, .e_literal = "5" },
+        .{ .e_ttype = TokenType.LTE, .e_literal = "<=" },
+        .{ .e_ttype = TokenType.INT, .e_literal = "10" },
+        .{ .e_ttype = TokenType.GTE, .e_literal = ">=" },
+        .{ .e_ttype = TokenType.INT, .e_literal = "5" },
+        .{ .e_ttype = TokenType.SEMICOLON, .e_literal = ";" },
+        .{ .e_ttype = TokenType.INT, .e_literal = "5" },
+        .{ .e_ttype = TokenType.NEQ, .e_literal = "!=" },
+        .{ .e_ttype = TokenType.INT, .e_literal = "5" },
+        .{ .e_ttype = TokenType.SEMICOLON, .e_literal = ";" },
+        .{ .e_ttype = TokenType.INT, .e_literal = "10" },
+        .{ .e_ttype = TokenType.EQ, .e_literal = "==" },
+        .{ .e_ttype = TokenType.INT, .e_literal = "10" },
         .{ .e_ttype = TokenType.SEMICOLON, .e_literal = ";" },
         .{ .e_ttype = TokenType.EOF, .e_literal = "\x00" },
     };
