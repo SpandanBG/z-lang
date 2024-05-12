@@ -5,24 +5,25 @@ const cstring = @cImport(@cInclude("ctype.h"));
 const Allocator = std.mem.Allocator;
 const File = std.fs.File;
 const AList = std.ArrayList;
+const Reader = std.io.AnyReader;
 
 const TokenType = token.TokenType;
 const Token = token.Token;
 const Tokenizer = token.Tokenizer;
 
 pub const Lexer = struct {
-    in: File, // program file
+    in: Reader, // program file
     ri: u2 = 0, // current read index
     rb: [3:0]u8 = undefined, // read buffer
     a: Allocator,
     flex_buf: AList(u8),
     tknzr: *Tokenizer,
 
-    pub const Error = Tokenizer.Error || Allocator.Error || File.ReadError || error{FILE_EOF};
+    pub const Error = Tokenizer.Error || Allocator.Error || Reader.Error || error{FILE_EOF};
 
     const Self = @This();
 
-    fn init(in: File, tknzr: *Tokenizer, a: Allocator) Error!Self {
+    pub fn init(in: Reader, tknzr: *Tokenizer, a: Allocator) Error!Self {
         const fb = AList(u8).init(a);
         var lxr = Lexer{ .in = in, .flex_buf = fb, .tknzr = tknzr, .a = a };
         _ = try in.read(&lxr.rb);
@@ -249,7 +250,7 @@ test "next token" {
     var tknzr = try Tokenizer.init(std.testing.allocator);
     defer tknzr.deinit();
 
-    var lxr = try Lexer.init(input_f, &tknzr, std.testing.allocator);
+    var lxr = try Lexer.init(input_f.reader().any(), &tknzr, std.testing.allocator);
     defer lxr.deinit();
 
     for (tests) |t| {
