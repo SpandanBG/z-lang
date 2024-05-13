@@ -34,4 +34,4 @@ pub const Program = struct {
 
 pub const Let = struct { tkn: *Token, name: Identifier, value: Expression };
 
-pub const Identifier = struct { tkn: *Token, value: []u8 };
+pub const Identifier = struct { tkn: *Token, value: []const u8 };
