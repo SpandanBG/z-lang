@@ -20,7 +20,10 @@ pub const Parser = struct {
 
     const Self = @This();
 
-    pub const Error = Lexer.Error || Allocator.Error || error{};
+    pub const Error = Lexer.Error || Allocator.Error || error{
+        LET_PARSE_ERR,
+        RETURN_PARSE_ERR,
+    };
     pub const ErrorCtx = union(enum) {
         PEEK_ERROR: struct { expected: TokenType, actual: TokenType },
     };
@@ -83,26 +86,20 @@ pub const Parser = struct {
         const stmt = try self.a.create(ast.Statement);
 
         stmt.* = switch (self.cur_tkn.t_type) {
-            TokenType.LET => b: {
-                const let = try self.parse_let_stmt() orelse return null;
-                break :b ast.Statement{ .LET = let };
-            },
-            TokenType.RETURN => b: {
-                const rt = try self.parse_return_stmt() orelse return null;
-                break :b ast.Statement{ .RETURN = rt };
-            },
+            TokenType.LET => ast.Statement{ .LET = self.parse_let_stmt() catch return null },
+            TokenType.RETURN => ast.Statement{ .RETURN = self.parse_return_stmt() catch return null },
             else => return null,
         };
 
         return stmt;
     }
 
-    fn parse_let_stmt(self: *Self) Error!?ast.Let {
+    fn parse_let_stmt(self: *Self) Error!ast.Let {
         var let = ast.Let{ .tkn = self.cur_tkn, .name = undefined, .value = undefined };
-        if (!self.expect_peek(TokenType.IDENT)) return null;
+        if (!self.expect_peek(TokenType.IDENT)) return Error.LET_PARSE_ERR;
 
         let.name = ast.Identifier{ .tkn = self.cur_tkn, .value = self.cur_tkn.literal };
-        if (!self.expect_peek(TokenType.ASSIGN)) return null;
+        if (!self.expect_peek(TokenType.ASSIGN)) return Error.LET_PARSE_ERR;
 
         // TODO: skipping expression till we reach ; or EOF
         while (self.cur_tkn.t_type != TokenType.SEMICOLON) : (_ = try self.next_token()) {}
@@ -110,7 +107,7 @@ pub const Parser = struct {
         return let;
     }
 
-    fn parse_return_stmt(self: *Self) Error!?ast.Return {
+    fn parse_return_stmt(self: *Self) Error!ast.Return {
         const rt = ast.Return{ .tkn = self.cur_tkn, .return_value = undefined };
 
         // TODO: skipping expression till we reach ; or EOF
