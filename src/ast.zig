@@ -6,9 +6,9 @@ const AL = std.ArrayList;
 const Token = token.Token;
 
 pub const Node = union(enum) {
-    stmt: *Statement,
-    expr: *Expression,
-    prgm: *Program,
+    STMT: *Statement,
+    EXPR: *Expression,
+    PRGM: *Program,
 };
 
 pub fn destroy_node(node: *Node, allocator: Allocator) void {
@@ -21,17 +21,20 @@ pub fn destroy_node(node: *Node, allocator: Allocator) void {
 }
 
 pub const Statement = union(enum) {
-    let: Let,
+    LET: Let,
+    RETURN: Return,
 };
 
 pub const Expression = union(enum) {
-    identifier: Identifier,
+    IDENTIFIER: Identifier,
 };
 
 pub const Program = struct {
-    stmts: AL(*Statement),
+    STMTS: AL(*Statement),
 };
 
 pub const Let = struct { tkn: *Token, name: Identifier, value: Expression };
 
 pub const Identifier = struct { tkn: *Token, value: []const u8 };
+
+pub const Return = struct { tkn: *Token, return_value: Expression };

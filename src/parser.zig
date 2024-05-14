@@ -28,7 +28,7 @@ pub const Parser = struct {
     pub fn init(lxr: *Lexer, a: Allocator) Error!Self {
         const errs = AL(*ErrorCtx).init(a);
         var prog = try a.create(ast.Program);
-        prog.stmts = AL(*ast.Statement).init(a);
+        prog.STMTS = AL(*ast.Statement).init(a);
 
         var prs = Self{ .lxr = lxr, .program = prog, .errors = errs, .a = a };
         try prs.next_token();
@@ -39,7 +39,7 @@ pub const Parser = struct {
     pub fn parse_program(self: *Self) Error!*Program {
         while (self.cur_tkn.t_type != TokenType.EOF) : (_ = try self.next_token()) {
             const stmt = try self.parse_statement() orelse continue;
-            try self.program.stmts.append(stmt);
+            try self.program.STMTS.append(stmt);
         }
 
         return self.program;
@@ -50,8 +50,8 @@ pub const Parser = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        for (self.program.stmts.items) |stmt| self.a.destroy(stmt);
-        self.program.stmts.deinit();
+        for (self.program.STMTS.items) |stmt| self.a.destroy(stmt);
+        self.program.STMTS.deinit();
 
         for (self.errors.items) |err| self.a.destroy(err);
         self.errors.deinit();
@@ -85,7 +85,7 @@ pub const Parser = struct {
         switch (self.cur_tkn.t_type) {
             TokenType.LET => {
                 const let = try self.parse_let_stmt() orelse return null;
-                stmt.* = ast.Statement{ .let = let };
+                stmt.* = ast.Statement{ .LET = let };
             },
             else => return null,
         }
@@ -147,7 +147,7 @@ test "let statement" {
     const prgm = try prsr.parse_program();
 
     try isEq(0, prsr.get_errors().len);
-    try isTrue(memEq(u8, "x", prgm.stmts.items[0].let.name.value));
-    try isTrue(memEq(u8, "y", prgm.stmts.items[1].let.name.value));
-    try isTrue(memEq(u8, "foobar", prgm.stmts.items[2].let.name.value));
+    try isTrue(memEq(u8, "x", prgm.STMTS.items[0].LET.name.value));
+    try isTrue(memEq(u8, "y", prgm.STMTS.items[1].LET.name.value));
+    try isTrue(memEq(u8, "foobar", prgm.STMTS.items[2].LET.name.value));
 }
