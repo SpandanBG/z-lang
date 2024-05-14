@@ -10,6 +10,16 @@ const Lexer = lexer.Lexer;
 const Token = token.Token;
 const TokenType = token.TokenType;
 
+const Precedence = enum(u8) {
+    LOWEST,
+    EQUALS, // ==
+    LESSGREATER, // <, >, <=, >=
+    SUM, // +
+    PRODUCT, // *
+    PREFIX, // -X, !X
+    CALL, // func()
+};
+
 pub const Parser = struct {
     lxr: *Lexer,
     program: *ast.Program,
@@ -88,10 +98,31 @@ pub const Parser = struct {
         stmt.* = switch (self.cur_tkn.t_type) {
             TokenType.LET => ast.Statement{ .LET = self.parse_let_stmt() catch return null },
             TokenType.RETURN => ast.Statement{ .RETURN = self.parse_return_stmt() catch return null },
-            else => return null,
+            else => ast.Statement{ .EXPR_STMT = self.parse_expr_stmt() catch return null },
         };
 
         return stmt;
+    }
+
+    fn parse_expr(self: *Self, pcd: Precedence) Error!?ast.Expression {
+        _ = pcd;
+
+        const left_exp = try self.parse_prefix_expr();
+        return left_exp;
+    }
+
+    fn parse_expr_stmt(self: *Self) Error!ast.ExpressionStmt {
+        var expr_stmt = ast.ExpressionStmt{ .tkn = self.cur_tkn, .expr = undefined };
+        expr_stmt.expr = try self.parse_expr(Precedence.LOWEST) orelse undefined;
+        if (self.peek_tkn.t_type == TokenType.SEMICOLON) try self.next_token();
+        return expr_stmt;
+    }
+
+    fn parse_prefix_expr(self: *Self) Error!?ast.Expression {
+        return switch (self.cur_tkn.t_type) {
+            TokenType.IDENT => |_| try self.parse_identifier(),
+            else => return null,
+        };
     }
 
     fn parse_let_stmt(self: *Self) Error!ast.Let {
@@ -109,11 +140,16 @@ pub const Parser = struct {
 
     fn parse_return_stmt(self: *Self) Error!ast.Return {
         const rt = ast.Return{ .tkn = self.cur_tkn, .return_value = undefined };
+        try self.next_token();
 
         // TODO: skipping expression till we reach ; or EOF
         while (self.cur_tkn.t_type != TokenType.SEMICOLON) : (_ = try self.next_token()) {}
 
         return rt;
+    }
+
+    fn parse_identifier(self: *Self) Error!ast.Expression {
+        return ast.Expression{ .IDENTIFIER = .{ .tkn = self.cur_tkn, .value = self.cur_tkn.literal } };
     }
 };
 
@@ -183,4 +219,25 @@ test "return statement" {
 
     try isEq(0, prsr.get_errors().len);
     for (prgm.STMTS.items) |stmt| try isEq(TokenType.RETURN, stmt.RETURN.tkn.t_type);
+}
+
+test "identifier expr" {
+    var fba = std.io.fixedBufferStream(
+        \\foobar;
+    );
+    const allocator = std.testing.allocator;
+
+    var tknz = try token.Tokenizer.init(allocator);
+    defer tknz.deinit();
+
+    var lxr = try Lexer.init(fba.reader().any(), &tknz, allocator);
+    defer lxr.deinit();
+
+    var prsr = try Parser.init(&lxr, allocator);
+    defer prsr.deinit();
+
+    const prgm = try prsr.parse_program();
+
+    try isEq(0, prsr.get_errors().len);
+    try isTrue(memEq(u8, "foobar", prgm.STMTS.items[0].EXPR_STMT.expr.IDENTIFIER.value));
 }
