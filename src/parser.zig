@@ -5,15 +5,20 @@ const token = @import("token.zig");
 
 const AL = std.ArrayList;
 const Allocator = std.mem.Allocator;
+const HM = std.AutoHashMap;
 const Program = ast.Program;
 const Lexer = lexer.Lexer;
 const Token = token.Token;
 const TokenType = token.TokenType;
 
+const exp_parser = fn (*Parser) ast.Expression;
+
 pub const Parser = struct {
     lxr: *Lexer,
     program: *ast.Program,
     errors: AL(*ErrorCtx),
+    prefix_parser_fns: HM(TokenType, *exp_parser),
+    infix_parser_fns: HM(TokenType, *exp_parser),
     a: Allocator,
     cur_tkn: *Token = undefined,
     peek_tkn: *Token = undefined,
@@ -30,10 +35,19 @@ pub const Parser = struct {
 
     pub fn init(lxr: *Lexer, a: Allocator) Error!Self {
         const errs = AL(*ErrorCtx).init(a);
+        const ppf = HM(TokenType, *exp_parser).init(a);
+        const ipf = HM(TokenType, *exp_parser).init(a);
         var prog = try a.create(ast.Program);
         prog.STMTS = AL(*ast.Statement).init(a);
 
-        var prs = Self{ .lxr = lxr, .program = prog, .errors = errs, .a = a };
+        var prs = Self{
+            .lxr = lxr,
+            .program = prog,
+            .errors = errs,
+            .prefix_parser_fns = ppf,
+            .infix_parser_fns = ipf,
+            .a = a,
+        };
         try prs.next_token();
         try prs.next_token();
         return prs;
@@ -58,6 +72,9 @@ pub const Parser = struct {
 
         for (self.errors.items) |err| self.a.destroy(err);
         self.errors.deinit();
+
+        self.prefix_parser_fns.deinit();
+        self.infix_parser_fns.deinit();
 
         self.a.destroy(self.program);
     }
@@ -109,6 +126,7 @@ pub const Parser = struct {
 
     fn parse_return_stmt(self: *Self) Error!ast.Return {
         const rt = ast.Return{ .tkn = self.cur_tkn, .return_value = undefined };
+        try self.next_token();
 
         // TODO: skipping expression till we reach ; or EOF
         while (self.cur_tkn.t_type != TokenType.SEMICOLON) : (_ = try self.next_token()) {}
