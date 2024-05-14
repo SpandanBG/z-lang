@@ -82,13 +82,17 @@ pub const Parser = struct {
     fn parse_statement(self: *Self) Error!?*ast.Statement {
         const stmt = try self.a.create(ast.Statement);
 
-        switch (self.cur_tkn.t_type) {
-            TokenType.LET => {
+        stmt.* = switch (self.cur_tkn.t_type) {
+            TokenType.LET => b: {
                 const let = try self.parse_let_stmt() orelse return null;
-                stmt.* = ast.Statement{ .LET = let };
+                break :b ast.Statement{ .LET = let };
+            },
+            TokenType.RETURN => b: {
+                const rt = try self.parse_return_stmt() orelse return null;
+                break :b ast.Statement{ .RETURN = rt };
             },
             else => return null,
-        }
+        };
 
         return stmt;
     }
@@ -104,6 +108,15 @@ pub const Parser = struct {
         while (self.cur_tkn.t_type != TokenType.SEMICOLON) : (_ = try self.next_token()) {}
 
         return let;
+    }
+
+    fn parse_return_stmt(self: *Self) Error!?ast.Return {
+        const rt = ast.Return{ .tkn = self.cur_tkn, .return_value = undefined };
+
+        // TODO: skipping expression till we reach ; or EOF
+        while (self.cur_tkn.t_type != TokenType.SEMICOLON) : (_ = try self.next_token()) {}
+
+        return rt;
     }
 };
 
@@ -150,4 +163,27 @@ test "let statement" {
     try isTrue(memEq(u8, "x", prgm.STMTS.items[0].LET.name.value));
     try isTrue(memEq(u8, "y", prgm.STMTS.items[1].LET.name.value));
     try isTrue(memEq(u8, "foobar", prgm.STMTS.items[2].LET.name.value));
+}
+
+test "return statement" {
+    var fba = std.io.fixedBufferStream(
+        \\return 5;
+        \\return 10;
+        \\return 42;
+    );
+    const allocator = std.testing.allocator;
+
+    var tknz = try token.Tokenizer.init(allocator);
+    defer tknz.deinit();
+
+    var lxr = try Lexer.init(fba.reader().any(), &tknz, allocator);
+    defer lxr.deinit();
+
+    var prsr = try Parser.init(&lxr, allocator);
+    defer prsr.deinit();
+
+    const prgm = try prsr.parse_program();
+
+    try isEq(0, prsr.get_errors().len);
+    for (prgm.STMTS.items) |stmt| try isEq(TokenType.RETURN, stmt.RETURN.tkn.t_type);
 }
