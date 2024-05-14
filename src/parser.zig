@@ -13,6 +13,7 @@ const TokenType = token.TokenType;
 pub const Parser = struct {
     lxr: *Lexer,
     program: *ast.Program,
+    errors: AL(*ErrorCtx),
     a: Allocator,
     cur_tkn: *Token = undefined,
     peek_tkn: *Token = undefined,
@@ -20,16 +21,18 @@ pub const Parser = struct {
     const Self = @This();
 
     pub const Error = Lexer.Error || Allocator.Error || error{};
+    pub const ErrorCtx = union(enum) {
+        PEEK_ERROR: struct { expected: TokenType, actual: TokenType },
+    };
 
     pub fn init(lxr: *Lexer, a: Allocator) Error!Self {
+        const errs = AL(*ErrorCtx).init(a);
         var prog = try a.create(ast.Program);
         prog.stmts = AL(*ast.Statement).init(a);
 
-        var prs = Self{ .lxr = lxr, .a = a, .program = prog };
-
+        var prs = Self{ .lxr = lxr, .program = prog, .errors = errs, .a = a };
         try prs.next_token();
         try prs.next_token();
-
         return prs;
     }
 
@@ -42,9 +45,17 @@ pub const Parser = struct {
         return self.program;
     }
 
+    pub fn get_errors(self: *Self) []*ErrorCtx {
+        return self.errors.items[0..];
+    }
+
     pub fn deinit(self: *Self) void {
         for (self.program.stmts.items) |stmt| self.a.destroy(stmt);
         self.program.stmts.deinit();
+
+        for (self.errors.items) |err| self.a.destroy(err);
+        self.errors.deinit();
+
         self.a.destroy(self.program);
     }
 
@@ -53,10 +64,19 @@ pub const Parser = struct {
         self.peek_tkn = try self.lxr.next_token();
     }
 
-    fn expect_peek(self: *Self, t_type: TokenType) bool {
-        if (self.peek_tkn.t_type != t_type) return false;
+    fn expect_peek(self: *Self, e_type: TokenType) bool {
+        const is_expected = self.peek_error(e_type) catch return false;
+        if (!is_expected) return false;
         self.next_token() catch return false;
         return true;
+    }
+
+    fn peek_error(self: *Self, e_type: TokenType) Error!bool {
+        if (self.peek_tkn.t_type == e_type) return true;
+        const err_ctx = try self.a.create(ErrorCtx);
+        err_ctx.* = ErrorCtx{ .PEEK_ERROR = .{ .expected = e_type, .actual = self.peek_tkn.t_type } };
+        try self.errors.append(err_ctx);
+        return false;
     }
 
     fn parse_statement(self: *Self) Error!?*ast.Statement {
@@ -126,6 +146,7 @@ test "let statement" {
 
     const prgm = try prsr.parse_program();
 
+    try isEq(0, prsr.get_errors().len);
     try isTrue(memEq(u8, "x", prgm.stmts.items[0].let.name.value));
     try isTrue(memEq(u8, "y", prgm.stmts.items[1].let.name.value));
     try isTrue(memEq(u8, "foobar", prgm.stmts.items[2].let.name.value));
