@@ -28,6 +28,7 @@ pub const Statement = union(enum) {
 
 pub const Expression = union(enum) {
     IDENTIFIER: Identifier,
+    INTEGER: Integer,
 };
 
 pub const Program = struct {
@@ -36,8 +37,10 @@ pub const Program = struct {
 
 pub const Let = struct { tkn: *Token, name: Identifier, value: Expression };
 
-pub const Identifier = struct { tkn: *Token, value: []const u8 };
-
 pub const Return = struct { tkn: *Token, return_value: Expression };
 
 pub const ExpressionStmt = struct { tkn: *Token, expr: Expression };
+
+pub const Identifier = struct { tkn: *Token, value: []const u8 };
+
+pub const Integer = struct { tkn: *Token, value: i64 };

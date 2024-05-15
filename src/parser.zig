@@ -121,6 +121,7 @@ pub const Parser = struct {
     fn parse_prefix_expr(self: *Self) Error!?ast.Expression {
         return switch (self.cur_tkn.t_type) {
             TokenType.IDENT => |_| try self.parse_identifier(),
+            TokenType.INT => |_| try self.parse_integer(),
             else => return null,
         };
     }
@@ -150,6 +151,11 @@ pub const Parser = struct {
 
     fn parse_identifier(self: *Self) Error!ast.Expression {
         return ast.Expression{ .IDENTIFIER = .{ .tkn = self.cur_tkn, .value = self.cur_tkn.literal } };
+    }
+
+    fn parse_integer(self: *Self) Error!ast.Expression {
+        const value = try std.fmt.parseInt(i64, self.cur_tkn.literal, 10);
+        return ast.Expression{ .INTEGER = .{ .tkn = self.cur_tkn, .value = value } };
     }
 };
 
@@ -240,4 +246,25 @@ test "identifier expr" {
 
     try isEq(0, prsr.get_errors().len);
     try isTrue(memEq(u8, "foobar", prgm.STMTS.items[0].EXPR_STMT.expr.IDENTIFIER.value));
+}
+
+test "integer literal expr" {
+    var fba = std.io.fixedBufferStream(
+        \\42;
+    );
+    const allocator = std.testing.allocator;
+
+    var tknz = try token.Tokenizer.init(allocator);
+    defer tknz.deinit();
+
+    var lxr = try Lexer.init(fba.reader().any(), &tknz, allocator);
+    defer lxr.deinit();
+
+    var prsr = try Parser.init(&lxr, allocator);
+    defer prsr.deinit();
+
+    const prgm = try prsr.parse_program();
+
+    try isEq(0, prsr.get_errors().len);
+    try isEq(42, prgm.STMTS.items[0].EXPR_STMT.expr.INTEGER.value);
 }
